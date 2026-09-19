@@ -1,0 +1,9 @@
+use_default_settings: true
+
+server:
+  secret_key: "launchproof-secret-key-2026-change-this"
+
+search:
+  formats:
+    - html
+    - json
