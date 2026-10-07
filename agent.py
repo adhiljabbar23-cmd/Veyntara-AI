@@ -6,7 +6,6 @@ from tools import search_web
 from calculations import calculate_financials
 
 from llm import client
-from research import evaluate_evidence
 
 
 
@@ -16,7 +15,7 @@ from research import evaluate_evidence
 def ask_ai(question):
     
     search_count = 0
-    MAX_SEARCHES = 6
+    MAX_SEARCHES = 3
     
     tools = [
         {
@@ -67,31 +66,7 @@ def ask_ai(question):
                             ]
                     }
                 }
-            },
-        {
-            "type": "function",
-            "function": {
-                "name": "evaluate_evidence",
-                "description": "Evaluate whether evidence actually supports or contradicts a business assumption.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "assumption": {
-                            "type": "string",
-                            "description": "The business assumption being investigated."
-                        },
-                        "evidence": {
-                            "type": "string",
-                            "description": "The evidence that should be evaluated."
-                        }
-                    },
-                    "required": [
-                        "assumption",
-                        "evidence"
-                    ]
-                }
             }
-        }
     ]
 
     messages=[
@@ -101,16 +76,16 @@ def ask_ai(question):
         }
     ]
     
-    for _ in range(15):
+    for _ in range(8):
         
         
         response = client.chat.completions.create(
-            model="openai/gpt-oss-20b",
-            messages = messages,
-            tools = tools,
-            tool_choice = "auto"
+            model="auto",
+            messages=messages,
+            tools=tools,
+            tool_choice="auto"
         )
-    
+            
         response_message =  response.choices[0].message  
 
         if not response_message.tool_calls:
@@ -128,8 +103,7 @@ def ask_ai(question):
             
             if tool_name not in [
                 "search_web",
-                "calculate_financials",
-                "evaluate_evidence"
+                "calculate_financials"
             ]:
                 print(f"Unknown tool reqiured : {tool_name}")
                 continue
@@ -137,10 +111,30 @@ def ask_ai(question):
             
             if tool_name == "search_web":
                 
-                arguments = json.loads(
-                    tool_call.function.arguments
+                try:
+
+                    arguments = json.loads(
+                        tool_call.function.arguments
                     )
-                
+
+                except json.JSONDecodeError:
+
+                    print("\nInvalid tool arguments received from the model.")
+
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "content": (
+                                "The tool arguments were invalid JSON. "
+                                "Please generate the search_web tool call again "
+                                "with valid JSON."
+                            )
+                        }
+                    )
+
+                    continue
+                            
                 if search_count >= MAX_SEARCHES : 
                     
                     messages.append(
@@ -156,11 +150,25 @@ def ask_ai(question):
                 
                     continue
                 
-                search_count +=1
-                
-                result = search_web(
-                    arguments["query"]
-                )
+                query = arguments.get("query")
+
+                if not query:
+                    print("\nSearch tool called without a query.")
+
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "content": (
+                                "The search_web tool requires a non-empty 'query' argument. "
+                                "Please call search_web again with a valid query."
+                            )
+                        }
+                    )
+                    continue
+
+                search_count += 1
+                result = search_web(query)
                 messages.append(
                     {
                         "role" : "tool",
@@ -188,24 +196,6 @@ def ask_ai(question):
                         "content" : str(result)
                     }
                 )  
-            
-            elif tool_name == "evaluate_evidence":
-
-                arguments = json.loads(
-                    tool_call.function.arguments
-                )
-
-                result = evaluate_evidence(
-                    assumption=arguments["assumption"],
-                    evidence=arguments["evidence"]
-                )
-
-                messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": tool_call.id,
-                        "content": result.model_dump_json()
-                    }
-                )               
+                        
     
     return "The agent reached its research limit."

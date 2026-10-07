@@ -1,10 +1,10 @@
 import os
-
 from dotenv import load_dotenv
-from groq import Groq
+from openai import OpenAI
 
 load_dotenv()
 
-client = Groq(
-    api_key=os.getenv("GROQ_API_KEY")
+client = OpenAI(
+    api_key=os.getenv("FREELLMAPI_API_KEY"),
+    base_url="http://localhost:3001/v1"
 )

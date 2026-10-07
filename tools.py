@@ -17,12 +17,12 @@ def search_web(query):
     
     results = []
     
-    for result in data["results"][:5]:
+    for result in data["results"][:3]:
         
         results.append({
             "title" : result["title"],
             "url" : result["url"],
-            "content" : result.get("content","")
+            "content" : result.get("content","")[:350]
         })
         
     return str(results)
