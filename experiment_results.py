@@ -12,7 +12,11 @@ from statistical_testing import (
     evaluate_business_significance,
     validate_threshold_for_testing
 )
-from threshold_validation import evaluate_threshold
+from threshold_validation import (
+    evaluate_threshold,
+    create_volume_threshold,
+    evaluate_volume_threshold
+)
 from experiment_validation import (
     validate_experiment_result,
     validate_experiment_consistency
@@ -42,8 +46,6 @@ original assumption.
 
 Rules:
 
-Rules:
-
 1. Base the analysis only on the experiment result and observations.
 2. Do not invent facts.
 3. "Supports" means the experiment provides evidence in favor of the assumption.
@@ -52,12 +54,15 @@ Rules:
 6. support MUST be exactly one of:
    "Supports", "Contradicts", or "Unclear".
 7. Never use "Mixed".
-8. Return ONLY valid JSON.
+8.The strength field MUST be exactly one of:
+"Weak", "Moderate", or "Strong".
+9.Never use "Low", "Medium", or any other value for strength.
+10. Return ONLY valid JSON matching the required schema.
 Return exactly:
 
 {{
-    "support": "Supports",
-    "strength": "Moderate",
+    "support": "Unclear",
+    "strength": "Weak",
     "evidence": "...",
     "explanation": "..."
 }}
@@ -89,12 +94,17 @@ Return exactly:
     return ExperimentAnalysis.model_validate_json(result)
 
 
+
+
 def apply_experiment_result(
     assumption,
     experiment,
     experiment_result,
-    business_threshold
+    business_threshold,
+    business
 ):
+
+
     # 0. Validate experiment data
     validate_experiment_result(experiment_result)
     
@@ -120,7 +130,13 @@ def apply_experiment_result(
     validate_threshold_for_testing(
         threshold_evaluation
     )
-
+    volume_threshold = create_volume_threshold(
+        required_contribution=business.initial_budget,
+        price=business.price,
+        variable_cost=business.variable_cost
+    )
+    print("\nVolume Threshold:")
+    print(volume_threshold)
     # 2. Statistical analysis
     statistical_result = None
     business_significance = None
@@ -157,26 +173,46 @@ def apply_experiment_result(
     print(analysis)
 
     # 5. Existing evidence evaluation
-    experiment_evidence = f"""
-    Experiment:
-    {experiment_result.experiment}
+    if (
+        experiment_result.sample_size is not None
+        and experiment_result.successes is not None
+    ):
+        observed_rate = (
+            experiment_result.successes /
+            experiment_result.sample_size
+        )
 
-    Result:
-    {experiment_result.result}
-
+        quantitative_evidence = f"""
     Observed conversion rate:
-    {experiment_result.successes / experiment_result.sample_size:.1%}
+    {observed_rate:.1%}
 
     Business threshold:
     {business_threshold.value:.1%}
 
     Statistical classification:
-    {business_significance.classification if business_significance else "Not available"}
-
-    Experiment evidence:
-    {analysis.evidence}
+    {
+        business_significance.classification
+        if business_significance
+        else "Not available"
+    }
     """
+    else:
+        quantitative_evidence = """
+    Quantitative conversion analysis:
+    Not applicable for this experiment.
+    """
+    experiment_evidence = f"""
+        Experiment:
+        {experiment_result.experiment}
 
+        Result:
+        {experiment_result.result}
+
+        {quantitative_evidence}
+
+        Experiment evidence:
+        {analysis.evidence}
+        """
     if business_significance:
         if business_significance.classification == "Above Threshold":
             support = "Supports"
@@ -216,3 +252,43 @@ def apply_experiment_result(
         "statistical_result": statistical_result,
         "business_significance": business_significance
     }
+    
+def build_economic_threshold(
+    required_contribution,
+    contribution_per_unit,
+    reachable_customers
+):
+    if required_contribution <= 0:
+        raise ValueError("Required contribution must be positive.")
+
+    if contribution_per_unit <= 0:
+        raise ValueError("Contribution per unit must be positive.")
+
+    if reachable_customers <= 0:
+        raise ValueError("Reachable customers must be positive.")
+
+    required_rate = (
+        required_contribution
+        / (contribution_per_unit * reachable_customers)
+    )
+
+    if required_rate > 1:
+        raise ValueError(
+            "The target cannot be reached with the specified "
+            "contribution and reachable-customer count."
+        )
+
+    return BusinessThreshold(
+        metric="purchase_rate",
+        value=required_rate,
+        source="derived_from_economics",
+        rationale=(
+            "The required purchase rate is calculated from the "
+            "business contribution target and reachable customers."
+        ),
+        economic_basis=EconomicThresholdBasis(
+            required_contribution=required_contribution,
+            contribution_per_unit=contribution_per_unit,
+            reachable_customers=reachable_customers
+        )
+    )
