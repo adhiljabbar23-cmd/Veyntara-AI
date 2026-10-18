@@ -3,13 +3,14 @@ from typing import Literal
 from pydantic import BaseModel,Field
 
 class BusinessProfile(BaseModel):
-    name : str
-    idea : str
-    target_customer : str
-    location : str
-    price : float
-    revenue_model : str
-    initial_budget : float
+    name: str
+    idea: str
+    target_customer: str
+    location: str
+    price: float
+    variable_cost: float
+    revenue_model: str
+    initial_budget: float
     
 class EvidenceEvaluation(BaseModel):
     relevance : Literal["Low", "Medium", "High"]
@@ -104,3 +105,8 @@ class ModificationRecommendation(BaseModel):
     modification: str
     reason: str
     next_experiment: str
+    
+class VolumeThreshold(BaseModel):
+    metric: str
+    required_units: int = Field(gt=0)
+    rationale: str

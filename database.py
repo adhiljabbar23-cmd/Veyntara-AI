@@ -20,9 +20,19 @@ def initialize_database():
             location TEXT,
             price REAL,
             revenue_model TEXT,
-            initial_budget REAL
+            initial_budget REAL,
+            variable_cost REAL
         )
     """)
+    
+    cursor.execute("PRAGMA table_info(businesses)")
+    columns = [column[1] for column in cursor.fetchall()]
+
+    if "variable_cost" not in columns:
+        cursor.execute(
+            "ALTER TABLE businesses ADD COLUMN variable_cost REAL"
+        )
+    
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS assumptions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,13 +59,31 @@ def initialize_database():
         observations TEXT,
         sample_size INTEGER,
         successes INTEGER,
+        status TEXT NOT NULL DEFAULT 'planned',
         FOREIGN KEY (business_id) REFERENCES businesses(id),
         FOREIGN KEY (assumption_id) REFERENCES assumptions(id)
     )
 """)
+    
+    cursor.execute("PRAGMA table_info(experiments)")
+    columns = [column[1] for column in cursor.fetchall()]
 
+    if "status" not in columns:
+        cursor.execute("""
+            ALTER TABLE experiments
+            ADD COLUMN status TEXT NOT NULL DEFAULT 'planned'
+        """)
+
+    cursor.execute("""
+        UPDATE experiments
+        SET status = 'completed'
+        WHERE result IS NOT NULL
+          AND TRIM(result) != ''
+        """)
+    
     connection.commit()
     connection.close()
+
 
 
 def save_business(business):
@@ -69,16 +97,18 @@ def save_business(business):
             target_customer,
             location,
             price,
+            variable_cost,
             revenue_model,
             initial_budget
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         business.name,
         business.idea,
         business.target_customer,
         business.location,
         business.price,
+        business.variable_cost,
         business.revenue_model,
         business.initial_budget
     ))
@@ -88,6 +118,7 @@ def save_business(business):
     connection.close()
 
     return business_id
+
 
 def save_assumption(business_id, assumption):
     connection = get_connection()
@@ -140,7 +171,8 @@ def get_assumptions(business_id):
 
     return assumptions
 
-def save_experiment(business_id, assumption_id, experiment, experiment_result):
+
+def save_experiment(business_id, assumption_id, experiment, experiment_result=None):
     connection = get_connection()
     cursor = connection.cursor()
 
@@ -156,9 +188,10 @@ def save_experiment(business_id, assumption_id, experiment, experiment_result):
             result,
             observations,
             sample_size,
-            successes
+            successes,
+            status
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, ?)
     """, (
         business_id,
         assumption_id,
@@ -167,10 +200,7 @@ def save_experiment(business_id, assumption_id, experiment, experiment_result):
         experiment.estimated_cost,
         experiment.duration,
         experiment.planned_sample_size,
-        experiment_result.result,
-        experiment_result.observations,
-        experiment_result.sample_size,
-        experiment_result.successes
+        "planned"
     ))
 
     connection.commit()
@@ -178,6 +208,7 @@ def save_experiment(business_id, assumption_id, experiment, experiment_result):
     connection.close()
 
     return experiment_id
+
 
 def update_assumption_evaluation(
     assumption_id,
@@ -211,10 +242,15 @@ def get_experiments(business_id):
             id,
             assumption_id,
             experiment,
+            success_metric,
+            estimated_cost,
+            duration,
+            planned_sample_size,
             result,
             observations,
             sample_size,
-            successes
+            successes,
+            status
         FROM experiments
         WHERE business_id = ?
     """, (business_id,))
@@ -237,6 +273,7 @@ def get_business(business_id):
             target_customer,
             location,
             price,
+            variable_cost,
             revenue_model,
             initial_budget
         FROM businesses
@@ -273,3 +310,28 @@ def get_all_businesses():
 
     return businesses
 
+def update_experiment_result(experiment_id, experiment_result):
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        UPDATE experiments
+        SET
+            result = ?,
+            observations = ?,
+            sample_size = ?,
+            successes = ?,
+            status = 'completed'
+        WHERE id = ?
+    """, (
+        experiment_result.result,
+        experiment_result.observations,
+        experiment_result.sample_size,
+        experiment_result.successes,
+        experiment_id
+    ))
+
+    connection.commit()
+    connection.close()
+    
+    

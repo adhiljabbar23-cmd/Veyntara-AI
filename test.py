@@ -1,46 +1,59 @@
-from models import (
-    BusinessThreshold,
-    EconomicThresholdBasis
+
+import sqlite3
+from types import SimpleNamespace
+
+from database import (
+    get_connection,
+    update_experiment_result,
 )
 
-from threshold_validation import evaluate_threshold
+# Create a temporary test experiment
+connection = get_connection()
+cursor = connection.cursor()
 
-from statistical_testing import (
-    run_one_proportion_test,
-    evaluate_business_significance,
-    validate_threshold_for_testing
-)
-
-
-threshold = BusinessThreshold(
-    metric="purchase_rate",
-    value=0.20,
-    source="derived_from_economics",
-    rationale=(
-        "The threshold is derived from the required "
-        "contribution and expected reachable customers."
-    ),
-    economic_basis=EconomicThresholdBasis(
-        required_contribution=40000,
-        contribution_per_unit=40,
-        reachable_customers=5000
+cursor.execute("""
+    INSERT INTO experiments (
+        business_id,
+        assumption_id,
+        experiment,
+        status
     )
-)
+    VALUES (?, ?, ?, ?)
+""", (4, None, "Temporary status test", "planned"))
 
-threshold_evaluation = evaluate_threshold(threshold)
+test_id = cursor.lastrowid
+connection.commit()
+connection.close()
 
-validate_threshold_for_testing(threshold_evaluation)
+try:
+    # Simulate recording a result for testing only
+    test_result = SimpleNamespace(
+        result="TEST ONLY - sample result",
+        observations="TEST ONLY - sample observation",
+        sample_size=None,
+        successes=None,
+    )
 
-statistical_result = run_one_proportion_test(
-    sample_size=50,
-    successes=12,
-    business_threshold=threshold,
-    confidence_level=0.95
-)
+    update_experiment_result(test_id, test_result)
 
-business_result = evaluate_business_significance(
-    statistical_result
-)
+    connection = get_connection()
+    cursor = connection.cursor()
 
-print("\nBUSINESS SIGNIFICANCE")
-print(business_result)
+    cursor.execute("""
+        SELECT result, observations, status
+        FROM experiments
+        WHERE id = ?
+    """, (test_id,))
+
+    print("Test result:", cursor.fetchone())
+    connection.close()
+
+finally:
+    # Delete only the temporary test record
+    connection = get_connection()
+    cursor = connection.cursor()
+    cursor.execute("DELETE FROM experiments WHERE id = ?", (test_id,))
+    connection.commit()
+    connection.close()
+
+    print("Temporary test record removed.")

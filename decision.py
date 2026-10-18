@@ -284,15 +284,17 @@ def calculate_priority(result):
 
     return priority_score
 
+
 def find_priority_assumptions(results):
 
     prioritized = []
 
-    for result in results:
+    for index, result in enumerate(results):
 
         score = calculate_priority(result)
 
         prioritized.append({
+            "original_index": index,
             "statement": result["statement"],
             "importance": result["importance"],
             "risk": result["risk"],
@@ -323,48 +325,3 @@ def update_assumption_evidence(
 
     return updated_assumption
 
-if __name__ == "__main__":
-
-    from models import Assumption, EvidenceEvaluation
-
-    assumption = Assumption(
-        statement=(
-            "There is sufficient demand for healthy meal delivery "
-            "among college students."
-        ),
-        importance="High",
-        evidence="Evidence not yet available.",
-        evaluation=EvidenceEvaluation(
-            relevance="Low",
-            support="Unclear",
-            strength="Weak",
-            explanation="Evidence not yet available."
-        )
-    )
-
-    new_evaluation = EvidenceEvaluation(
-        relevance="High",
-        support="Unclear",
-        strength="Weak",
-        explanation=(
-            "The data shows that 34% of participants ordered at least once "
-            "and 7 of those repeated an order within 14 days."
-        )
-    )
-
-    new_evidence = (
-        "11 paid orders out of 32 participants, "
-        "with 7 customers placing another order within 14 days."
-    )
-
-    updated = update_assumption_evidence(
-        assumption,
-        new_evidence,
-        new_evaluation
-    )
-
-    print("\nUpdated Assumption:")
-    print(updated)
-
-    print("\nUpdated Decision Analysis:")
-    print(evaluate_assumption(updated))

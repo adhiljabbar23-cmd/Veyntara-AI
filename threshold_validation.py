@@ -1,4 +1,4 @@
-from models import BusinessThreshold, ThresholdEvaluation
+from models import BusinessThreshold, ThresholdEvaluation,VolumeThreshold
 
 
 def evaluate_threshold(threshold: BusinessThreshold):
@@ -119,3 +119,57 @@ def validate_economic_threshold(threshold):
         "provided_rate": threshold.value,
         "message": "The provided threshold does not match the economic calculation."
     }
+    
+
+
+
+def create_volume_threshold(
+    required_contribution,
+    price,
+    variable_cost
+):
+    from calculations import calculate_required_units
+
+    result = calculate_required_units(
+        required_contribution=required_contribution,
+        price=price,
+        variable_cost=variable_cost
+    )
+
+    if result is None:
+        return None
+
+    return VolumeThreshold(
+        metric="orders",
+        required_units=result["required_units"],
+        rationale=(
+            "Required orders are derived from the contribution "
+            "required to meet the business economic target."
+        )
+    )
+
+def evaluate_volume_threshold(
+    actual_units,
+    volume_threshold
+):
+    if actual_units >= volume_threshold.required_units:
+        return {
+            "classification": "Above Threshold",
+            "valid": True,
+            "explanation": (
+                f"Observed {actual_units} orders, which meets or exceeds "
+                f"the required threshold of "
+                f"{volume_threshold.required_units} orders."
+            )
+        }
+
+    return {
+        "classification": "Below Threshold",
+        "valid": False,
+        "explanation": (
+            f"Observed {actual_units} orders, which is below "
+            f"the required threshold of "
+            f"{volume_threshold.required_units} orders."
+        )
+    }
+
