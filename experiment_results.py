@@ -3,7 +3,8 @@ from models import (
     ExperimentResult,
     ExperimentAnalysis,
     BusinessThreshold,
-    EvidenceEvaluation
+    EvidenceEvaluation,
+    EconomicThresholdBasis
 )
 from research import evaluate_evidence
 from decision import update_assumption_evidence, evaluate_assumption
@@ -107,7 +108,7 @@ def apply_experiment_result(
 
     # 0. Validate experiment data
     validate_experiment_result(experiment_result)
-    
+
     consistency_warnings = validate_experiment_consistency(
         experiment,
         experiment_result
@@ -118,7 +119,7 @@ def apply_experiment_result(
 
         for warning in consistency_warnings:
             print("-", warning)
-    
+
     # 1. Validate the business threshold
     threshold_evaluation = evaluate_threshold(
         business_threshold
@@ -252,7 +253,7 @@ def apply_experiment_result(
         "statistical_result": statistical_result,
         "business_significance": business_significance
     }
-    
+
 def build_economic_threshold(
     required_contribution,
     contribution_per_unit,

@@ -24,7 +24,7 @@ def initialize_database():
             variable_cost REAL
         )
     """)
-    
+
     cursor.execute("PRAGMA table_info(businesses)")
     columns = [column[1] for column in cursor.fetchall()]
 
@@ -32,7 +32,7 @@ def initialize_database():
         cursor.execute(
             "ALTER TABLE businesses ADD COLUMN variable_cost REAL"
         )
-    
+
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS assumptions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -64,7 +64,7 @@ def initialize_database():
         FOREIGN KEY (assumption_id) REFERENCES assumptions(id)
     )
 """)
-    
+
     cursor.execute("PRAGMA table_info(experiments)")
     columns = [column[1] for column in cursor.fetchall()]
 
@@ -80,15 +80,48 @@ def initialize_database():
         WHERE result IS NOT NULL
           AND TRIM(result) != ''
         """)
-    
+
     connection.commit()
     connection.close()
+
 
 
 
 def save_business(business):
     connection = get_connection()
     cursor = connection.cursor()
+
+    # Check whether an identical business already exists.
+
+    cursor.execute("""
+        SELECT id, target_customer, location, price,
+               variable_cost, revenue_model, initial_budget
+        FROM businesses
+        WHERE LOWER(TRIM(name)) = LOWER(TRIM(?))
+          AND LOWER(TRIM(idea)) = LOWER(TRIM(?))
+        ORDER BY id
+    """, (business.name, business.idea))
+
+    matches = cursor.fetchall()
+
+    if matches:
+        print("\nA business with this name and idea already exists:")
+
+        for row in matches:
+            print(
+                f"ID: {row[0]} | Customer: {row[1]} | "
+                f"Location: {row[2]} | Price: ₹{row[3]} | "
+                f"Variable cost: ₹{row[4]} | "
+                f"Revenue model: {row[5]} | Budget: ₹{row[6]}"
+            )
+
+        connection.close()
+        raise ValueError(
+            "A matching business already exists. "
+            "Choose an existing business to continue, "
+            "or explicitly implement a separate-version option."
+        )
+
 
     cursor.execute("""
         INSERT INTO businesses (
@@ -118,6 +151,7 @@ def save_business(business):
     connection.close()
 
     return business_id
+
 
 
 def save_assumption(business_id, assumption):
@@ -333,5 +367,5 @@ def update_experiment_result(experiment_id, experiment_result):
 
     connection.commit()
     connection.close()
-    
-    
+
+

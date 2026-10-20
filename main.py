@@ -15,7 +15,7 @@ from modifications import generate_modification
 from agent import ask_ai
 from decision import evaluate_all_assumptions, make_decision
 from experiments import generate_experiment
-from experiment_results import apply_experiment_result
+from experiment_results import apply_experiment_result,build_economic_threshold
 from research import evaluate_evidence
 from database import (
     initialize_database,
@@ -32,6 +32,57 @@ from database import (
 
 initialize_database()
 
+
+def view_existing_business(business_id):
+    business = get_business(business_id)
+
+    if business is None:
+        print("Business not found.")
+        return
+
+    print("\n========== BUSINESS DETAILS ==========")
+    print(f"ID: {business[0]}")
+    print(f"Name: {business[1]}")
+    print(f"Idea: {business[2]}")
+    print(f"Target customer: {business[3]}")
+    print(f"Location: {business[4]}")
+    print(f"Price: ₹{business[5]}")
+    print(f"Variable cost: ₹{business[6]}")
+    print(f"Revenue model: {business[7]}")
+    print(f"Initial budget: ₹{business[8]}")
+
+    assumptions = get_assumptions(business_id)
+    experiments = get_experiments(business_id)
+
+    print("\n========== SAVED ASSUMPTIONS ==========")
+
+    if assumptions:
+        for assumption in assumptions:
+            print(f"\nAssumption ID: {assumption[0]}")
+            print(f"Statement: {assumption[1]}")
+            print(f"Importance: {assumption[2]}")
+            print(f"Evidence: {assumption[3]}")
+            print(f"Risk: {assumption[4]}")
+            print(f"Confidence: {assumption[5]}")
+    else:
+        print("No saved assumptions yet.")
+
+    print("\n========== SAVED EXPERIMENTS ==========")
+
+    if experiments:
+        for experiment in experiments:
+            print(f"\nExperiment ID: {experiment[0]}")
+            print(f"Assumption ID: {experiment[1]}")
+            print(f"Experiment: {experiment[2]}")
+            print(f"Success metric: {experiment[3]}")
+            print(f"Status: {experiment[11]}")
+            print(f"Result: {experiment[7]}")
+            print(f"Observations: {experiment[8]}")
+    else:
+        print("No saved experiments yet.")
+
+
+
 print("\n1. Create a new business")
 print("2. Continue an existing business")
 
@@ -46,19 +97,23 @@ if choice == "2":
 
     print("\nExisting businesses:")
 
-    for business in businesses:
+
+    for item in businesses:
         print(
-            f"ID: {business[0]} | "
-            f"Name: {business[1]} | "
-            f"Idea: {business[2]}"
+            f"ID: {item[0]} | Name: {item[1]} | "
+            f"Idea: {item[2]} | Location: {item[3]}"
         )
 
     try:
-        business_id = int(input("\nEnter business ID: "))
+        selected_id = int(
+            input("\nEnter the business ID to continue: ").strip()
+        )
     except ValueError:
-        print("\nInvalid business ID. Please enter a number.")
+        print("Invalid ID. Please enter a number.")
         exit()
 
+
+    business_id = selected_id
     existing_business = get_business(business_id)
 
     if existing_business is None:
@@ -75,11 +130,14 @@ if choice == "2":
         revenue_model=existing_business[7],
         initial_budget=existing_business[8]
     )
-    business_id = existing_business[0]
+
     print(f"\nContinuing business: {business.name}")
+
     existing_assumptions = get_assumptions(business_id)
 
     print("\nExisting assumptions:")
+
+
 
     for assumption in existing_assumptions:
         print(
@@ -88,8 +146,8 @@ if choice == "2":
             f"Risk: {assumption[4]} | "
             f"Confidence: {assumption[5]}"
         )
-    
-        
+
+
 
 
     # Get all experiments before selecting an assumption
@@ -102,7 +160,7 @@ if choice == "2":
         assumption_id = experiment[1]
         experiments_by_assumption.setdefault(assumption_id, []).append(experiment)
 
-  
+
     # Find assumptions that still need validation
     planned_candidates = []
     unevaluated_candidates = []
@@ -113,17 +171,70 @@ if choice == "2":
             assumption_id, []
         )
 
-        # Resume an assumption that already has a planned experiment
+        # Select the most recently saved planned experiment
         planned_experiments = [
             experiment
             for experiment in assumption_experiments
             if experiment[11] == "planned"
         ]
 
-        if planned_experiments:
-            planned_candidates.append(assumption)
-            continue
 
+        if planned_experiments:
+            # Show planned experiments from newest to oldest
+            planned_experiments.sort(
+                key=lambda experiment: experiment[0],
+                reverse=True
+            )
+
+            print("\nPlanned experiments available:")
+
+            for index, experiment in enumerate(
+                planned_experiments, start=1
+            ):
+                print(f"\n{index}. Experiment ID: {experiment[0]}")
+                print(f"   Experiment: {experiment[2]}")
+                print(f"   Success metric: {experiment[3]}")
+
+
+            try:
+                experiment_choice = int(
+                    input(
+                        "\nChoose an option number (1 or 2): "
+                    ).strip()
+                )
+            except ValueError:
+                print("Invalid choice. Please enter 1 or 2.")
+                exit()
+
+            if not 1 <= experiment_choice <= len(planned_experiments):
+                print("Invalid selection. Choose one of the displayed option numbers.")
+                exit()
+
+            latest_experiment = planned_experiments[
+                experiment_choice - 1
+            ]
+
+
+        else:
+            print("\nNo planned experiment found for this assumption.")
+            print("Generating a new validation experiment...")
+
+            experiment = generate_experiment(
+                assumption=next_assumption[1]
+            )
+
+            experiment_id = save_experiment(
+                business_id=business_id,
+                assumption_id=next_assumption[0],
+                experiment=experiment
+            )
+
+            all_experiments = get_experiments(business_id)
+
+            latest_experiment = next(
+                item for item in all_experiments
+                if item[0] == experiment_id
+            )
         # Check whether the assumption still needs evaluation
         needs_evaluation = (
             assumption[4] is None
@@ -164,7 +275,7 @@ if choice == "2":
     print(f"Statement: {next_assumption[1]}")
     print(f"Importance: {next_assumption[2]}")
 
-    
+
 
     print("\nPrevious experiments:")
 
@@ -184,7 +295,7 @@ if choice == "2":
         if experiment[1] == next_assumption[0]
     ]
 
-    
+
     if assumption_experiments:
         print(
             f"\nPrevious experiments found for assumption "
@@ -204,8 +315,38 @@ if choice == "2":
         if experiment[11] == "planned"
     ]
 
+
     if planned_experiments:
-        latest_experiment = planned_experiments[-1]
+        # Show planned experiments from newest to oldest
+        planned_experiments.sort(
+            key=lambda experiment: experiment[0],
+            reverse=True
+        )
+
+        print("\nPlanned experiments available:")
+
+        for index, experiment in enumerate(
+            planned_experiments, start=1
+        ):
+            print(f"\n{index}. Experiment ID: {experiment[0]}")
+            print(f"   Experiment: {experiment[2]}")
+            print(f"   Success metric: {experiment[3]}")
+
+        try:
+            experiment_choice = int(
+                input("\nChoose an option number: ").strip()
+            )
+        except ValueError:
+            print("Invalid choice. Please enter a number.")
+            exit()
+
+        if not 1 <= experiment_choice <= len(planned_experiments):
+            print("Invalid selection. Choose one of the displayed option numbers.")
+            exit()
+
+        latest_experiment = planned_experiments[
+            experiment_choice - 1
+        ]
 
     else:
         print("\nNo planned experiment found for this assumption.")
@@ -229,12 +370,13 @@ if choice == "2":
             if item[0] == experiment_id
         )
 
+
     print("\nExperiment selected:")
     print(f"Experiment ID: {latest_experiment[0]}")
     print(f"Status: {latest_experiment[11]}")
     print(f"Experiment: {latest_experiment[2]}")
 
-        
+
 
     if latest_experiment[11] == "planned":
         print("\nExperiment status: PLANNED")
@@ -247,7 +389,7 @@ if choice == "2":
             print("\nExperiment remains saved as planned.")
             exit()
 
-            
+
         result_text = input(
             "\nWhat happened in the experiment? "
         )
@@ -309,14 +451,14 @@ if choice == "2":
             duration=latest_experiment[5],
             planned_sample_size=latest_experiment[6]
         )
-        
+
         assumption_object = Assumption(
             statement=next_assumption[1],
             importance=next_assumption[2],
             evidence=next_assumption[3],
             evaluation=None
         )
-        
+
         updated = apply_experiment_result(
             assumption=assumption_object,
             experiment=experiment_object,
@@ -331,15 +473,15 @@ if choice == "2":
         )
 
         print("\nAssumption evaluation saved to database.")
-        
+
         update_experiment_result(
                 experiment_id=latest_experiment[0],
                 experiment_result=experiment_result
             )
 
         print("\nExperiment result saved to database.")
-                    
-        
+
+
         saved_assumptions = get_assumptions(business_id)
 
         print("\nUpdated assumptions in database:")
@@ -347,7 +489,7 @@ if choice == "2":
             print(assumption)
         print("\nExperiment Analysis:")
         print(updated)
-        
+
 
     else:
         print("\nThis experiment has already been completed.")
@@ -356,441 +498,546 @@ if choice == "2":
         print(f"Observations: {latest_experiment[8]}")
         print("No new experiment was created.")
 
-    
+
+
 elif choice == "1":
+    name = input("Business name: ").strip()
+    idea = input("Business idea: ").strip()
+    target_customer = input("Target customer: ").strip()
+    location = input("Business location: ").strip()
+    price = float(input("Selling price per unit: ₹"))
+    variable_cost = float(input("Variable cost per unit: ₹"))
+    revenue_model = input("Revenue model: ").strip()
+    initial_budget = float(input("Initial budget: ₹"))
+
     business = BusinessProfile(
-        name="SkillBridge",
-        idea="Affordable weekend coding workshops",
-        target_customer="College students and beginners",
-        location="Kochi",
-        price=499,
-        variable_cost=150,
-        revenue_model="Per-person workshop fee1",
-        initial_budget=30000
+        name=name,
+        idea=idea,
+        target_customer=target_customer,
+        location=location,
+        price=price,
+        variable_cost=variable_cost,
+        revenue_model=revenue_model,
+        initial_budget=initial_budget
     )
 
-    business_id = save_business(business)
-    print(f"\nBusiness saved with ID: {business_id}")
-    
+    business_saved = False
 
+    try:
+        business_id = save_business(business)
+        business_saved = True
+        print(f"\nBusiness saved with ID: {business_id}")
 
+    except ValueError as error:
+        print(f"\n{error}")
+        print("No new business was saved.")
 
 
-    question = f"""
-    You are LaunchProof AI, a business validation agent.
 
-    Your job is NOT to create a business plan.
+        existing_businesses = get_all_businesses()
 
-    Your job is to identify the assumptions that must be true
-    for the business to succeed.
+        print("\nWhat would you like to do?")
+        print("1. Continue with an existing business")
+        print("2. Cancel and return to the main menu")
 
-    Business information:
+        action = input("Choose an option: ").strip()
 
-    Business name: {business.name}
-    Business idea: {business.idea}
-    Target customer: {business.target_customer}
-    Location: {business.location}
-    Price per unit: ₹{business.price}
-    Revenue model: {business.revenue_model}
-    Initial budget: ₹{business.initial_budget}
+        if action == "1":
+            print("\nExisting businesses:")
 
-    Identify the 5 most important assumptions behind this
-    business idea.
+            for item in existing_businesses:
+                print(
+                    f"ID: {item[0]} | Name: {item[1]} | "
+                    f"Idea: {item[2]} | Location: {item[3]}"
+                )
 
-    For each assumption provide:
+            try:
+                selected_id = int(
+                    input("\nEnter the business ID: ").strip()
+                )
 
-    - statement
-    - importance
-    - evidence
 
+                selected_business = get_business(selected_id)
 
-    Rules:
+                if selected_business is None:
+                    print("Invalid business ID. Returning to the menu.")
+                else:
+                    business_id = selected_business[0]
 
-    1. Do NOT invent evidence.
+                    business = BusinessProfile(
+                        name=selected_business[1],
+                        idea=selected_business[2],
+                        target_customer=selected_business[3],
+                        location=selected_business[4],
+                        price=selected_business[5],
+                        variable_cost=selected_business[6],
+                        revenue_model=selected_business[7],
+                        initial_budget=selected_business[8]
+                    )
 
-    2. If evidence is unavailable, say:
-    "Evidence not yet available."
+                    business_saved = True
 
-    3. Use the search_web tool when external information
-    could help investigate an assumption.
+                    print(f"\nSelected business ID: {business_id}")
+                    print(f"Business: {business.name}")
+                    print("Continuing with the selected business.")
 
 
-    4. Do not automatically treat search results as valid
-    evidence.
+            except ValueError:
+                print("Invalid ID. Returning to the menu.")
 
-    5. If evidence is indirect or does not directly answer
-    the assumption, treat it as "Unclear".
+        elif action == "2":
+            print("Cancelled. No database records were changed.")
 
+        else:
+            print("Invalid option. Returning to the menu.")
 
 
-    6. Do not search for every possible piece of information.
-    Prioritize the most important assumptions.
 
-    7. If useful evidence cannot be found, stop searching
-    and mark the evidence as:
-    "Evidence not yet available."
+    if not business_saved:
+        print("Skipping assumption generation.")
+    else:
 
-    8. Do not treat a competitor's selling price as evidence
-        of their production cost.
 
-    9. Importance must be exactly one of:
-        "Low", "Medium", "High".
 
 
+        question = f"""
+        You are LaunchProof AI, a business validation agent.
 
-    10. You do not need to investigate every assumption.
-        If evidence is unavailable after a reasonable search,
-        mark it as "Evidence not yet available" and move on.
+        Your job is NOT to create a business plan.
 
-    11. Once you have enough information to produce the
-        5 assumptions, immediately return the final JSON.
+        Your job is to identify the assumptions that must be true
+        for the business to succeed.
 
-    12. Never continue searching indefinitely.
+        Business information:
 
-    13. Return ONLY valid JSON.
+        Business name: {business.name}
+        Business idea: {business.idea}
+        Target customer: {business.target_customer}
+        Location: {business.location}
+        Price per unit: ₹{business.price}
+        Revenue model: {business.revenue_model}
+        Initial budget: ₹{business.initial_budget}
 
-    The JSON must follow this exact structure:
+        Identify the 5 most important assumptions behind this
+        business idea.
 
-    {{
-        "assumptions": [
-            {{
-                "statement": "...",
-                "importance": "High",
-                "evidence": "..."
-            }}
-        ]
-    }}
+        For each assumption provide:
 
+        - statement
+        - importance
+        - evidence
 
-    """
-    answer = ask_ai(question)
 
+        Rules:
 
-    print("\nRaw AI Response")
-    print(answer)
+        1. Do NOT invent evidence.
 
-    if answer.strip() == "The agent reached its research limit.":
-        print("\nThe agent did not finish within the research limit.")
-        exit()
+        2. If evidence is unavailable, say:
+        "Evidence not yet available."
 
-    # Extract the first valid JSON object
-    decoder = json.JSONDecoder()
-    json_start = answer.find("{")
+        3. Use the search_web tool when external information
+        could help investigate an assumption.
 
-    if json_start == -1:
-        raise ValueError("AI response did not contain a JSON object.")
 
-    parsed_json, _ = decoder.raw_decode(answer[json_start:])
-    raw_assumptions = AssumptionList.model_validate(parsed_json)
+        4. Do not automatically treat search results as valid
+        evidence.
 
-    evaluation_input = []
+        5. If evidence is indirect or does not directly answer
+        the assumption, treat it as "Unclear".
 
-    for assumption in raw_assumptions.assumptions:
-        evaluation_input.append({
-            "statement": assumption.statement,
-            "evidence": assumption.evidence
-        })
 
 
-    evaluation_result = evaluate_evidence(evaluation_input)
+        6. Do not search for every possible piece of information.
+        Prioritize the most important assumptions.
 
-    evaluation_data = json.loads(evaluation_result)
+        7. If useful evidence cannot be found, stop searching
+        and mark the evidence as:
+        "Evidence not yet available."
 
-    evaluations = evaluation_data["evaluations"]
+        8. Do not treat a competitor's selling price as evidence
+            of their production cost.
 
-    if len(evaluations) != len(raw_assumptions.assumptions):
-        raise ValueError(
-            "Number of evaluations does not match number of assumptions."
-        )
+        9. Importance must be exactly one of:
+            "Low", "Medium", "High".
 
-    for assumption, evaluation in zip(
-        raw_assumptions.assumptions,
-        evaluations
-    ):
-           assumption.evaluation = EvidenceEvaluation.model_validate(evaluation)
 
-    assumptions = raw_assumptions
 
-    print("\nValidated Response")
-    print(assumptions)
+        10. You do not need to investigate every assumption.
+            If evidence is unavailable after a reasonable search,
+            mark it as "Evidence not yet available" and move on.
 
+        11. Once you have enough information to produce the
+            5 assumptions, immediately return the final JSON.
 
-    decision_results = evaluate_all_assumptions(
-            assumptions.assumptions
-    )
-        
-    assumption_ids = []
+        12. Never continue searching indefinitely.
 
-    for assumption, decision in zip(
-        assumptions.assumptions,
-        decision_results
-    ):
-        assumption_id = save_assumption(
-            business_id=business_id,
-            assumption=assumption
-        )
+        13. Return ONLY valid JSON.
 
-        update_assumption_evaluation(
-            assumption_id=assumption_id,
-            risk=decision["risk"],
-            confidence=decision["confidence"]
-        )
+        The JSON must follow this exact structure:
 
-        assumption_ids.append(assumption_id)
-
-
-    saved_assumptions = get_assumptions(business_id)
-
-    print("\nSaved assumptions in database:")
-
-    for assumption in saved_assumptions:
-        print(assumption)
-    print("Decison Anlysis")
-        
-    for result in decision_results:
-        print(result)
-            
-    decision = make_decision(decision_results)
-
-    print("\nOverall Decision")
-    print(decision["decision"])
-
-    print("\nWhy?")
-    print(decision["reason"])
-
-    print("\nOverall Risk")
-    print(decision["overall_risk"])
-
-    print("\nEvidence Gaps")
-
-    for gap in decision["evidence_gaps"]:
-
-        print("\n-", gap["statement"])
-        print("  Reason:", gap["reason"])
-            
-    print("\nPriority Assumptions")
-
-    for item in decision["priority_assumptions"]:
-
-        print("\n-", item["statement"])
-        print("  Importance:", item["importance"])
-        print("  Risk:", item["risk"])
-        print("  Confidence:", item["confidence"])
-        print("  Priority Score:", item["priority_score"])
-            
-    if decision["priority_assumptions"]:
-
-            top_assumption = decision["priority_assumptions"][0]
-
-            top_assumption_index = top_assumption["original_index"]
-
-            top_assumption_object = assumptions.assumptions[
-                top_assumption_index
+        {{
+            "assumptions": [
+                {{
+                    "statement": "...",
+                    "importance": "High",
+                    "evidence": "..."
+                }}
             ]
+        }}
 
-            top_assumption_id = assumption_ids[top_assumption_index]
-            
-            print("\nRecommended Experiment")
 
-            experiment = generate_experiment(
-                top_assumption["statement"]
+        """
+        answer = ask_ai(question)
+
+
+        print("\nRaw AI Response")
+        print(answer)
+
+        if answer.strip() == "The agent reached its research limit.":
+            print("\nThe agent did not finish within the research limit.")
+            exit()
+
+        # Extract the first valid JSON object
+        decoder = json.JSONDecoder()
+        json_start = answer.find("{")
+
+        if json_start == -1:
+            raise ValueError("AI response did not contain a JSON object.")
+
+        parsed_json, _ = decoder.raw_decode(answer[json_start:])
+        raw_assumptions = AssumptionList.model_validate(parsed_json)
+
+        evaluation_input = []
+
+        for assumption in raw_assumptions.assumptions:
+            evaluation_input.append({
+                "statement": assumption.statement,
+                "evidence": assumption.evidence
+            })
+
+
+        evaluation_result = evaluate_evidence(evaluation_input)
+
+        evaluation_data = json.loads(evaluation_result)
+
+        evaluations = evaluation_data["evaluations"]
+
+        if len(evaluations) != len(raw_assumptions.assumptions):
+            raise ValueError(
+                "Number of evaluations does not match number of assumptions."
             )
 
-            print("\nAssumption:")
-            print(experiment.assumption)
+        for assumption, evaluation in zip(
+            raw_assumptions.assumptions,
+            evaluations
+        ):
+            assumption.evaluation = EvidenceEvaluation.model_validate(evaluation)
 
-            print("\nExperiment:")
-            print(experiment.experiment)
+        assumptions = raw_assumptions
 
-            print("\nSuccess Metric:")
-            print(experiment.success_metric)
+        print("\nValidated Response")
+        print(assumptions)
 
-            print("\nEstimated Cost:")
-            print(experiment.estimated_cost)
 
-            print("\nDuration:")
-            print(experiment.duration)
-                    
-            
-            print("\n--- Experiment Status ---")
-            conducted = input(
-                "Have you actually conducted this experiment? (y/n): "
-            ).strip().lower()
+        decision_results = evaluate_all_assumptions(
+                assumptions.assumptions
+        )
 
-            if conducted != "y":
-                # Save the experiment as planned, without fake results.
+        assumption_ids = []
+
+        for assumption, decision in zip(
+            assumptions.assumptions,
+            decision_results
+        ):
+            assumption_id = save_assumption(
+                business_id=business_id,
+                assumption=assumption
+            )
+
+            update_assumption_evaluation(
+                assumption_id=assumption_id,
+                risk=decision["risk"],
+                confidence=decision["confidence"]
+            )
+
+            assumption_ids.append(assumption_id)
+
+
+        saved_assumptions = get_assumptions(business_id)
+
+        print("\nSaved assumptions in database:")
+
+        for assumption in saved_assumptions:
+            print(assumption)
+        print("Decison Anlysis")
+
+        for result in decision_results:
+            print(result)
+
+        decision = make_decision(decision_results)
+
+        print("\nOverall Decision")
+        print(decision["decision"])
+
+        print("\nWhy?")
+        print(decision["reason"])
+
+        print("\nOverall Risk")
+        print(decision["overall_risk"])
+
+        print("\nEvidence Gaps")
+
+        for gap in decision["evidence_gaps"]:
+
+            print("\n-", gap["statement"])
+            print("  Reason:", gap["reason"])
+
+        print("\nPriority Assumptions")
+
+        for item in decision["priority_assumptions"]:
+
+            print("\n-", item["statement"])
+            print("  Importance:", item["importance"])
+            print("  Risk:", item["risk"])
+            print("  Confidence:", item["confidence"])
+            print("  Priority Score:", item["priority_score"])
+
+        if decision["priority_assumptions"]:
+
+                top_assumption = decision["priority_assumptions"][0]
+
+                top_assumption_index = top_assumption["original_index"]
+
+                top_assumption_object = assumptions.assumptions[
+                    top_assumption_index
+                ]
+
+                top_assumption_id = assumption_ids[top_assumption_index]
+
+                print("\nRecommended Experiment")
+
+                experiment = generate_experiment(
+                    top_assumption["statement"]
+                )
+
+                print("\nAssumption:")
+                print(experiment.assumption)
+
+                print("\nExperiment:")
+                print(experiment.experiment)
+
+                print("\nSuccess Metric:")
+                print(experiment.success_metric)
+
+                print("\nEstimated Cost:")
+                print(experiment.estimated_cost)
+
+                print("\nDuration:")
+                print(experiment.duration)
+
+
+                print("\n--- Experiment Status ---")
+                conducted = input(
+                    "Have you actually conducted this experiment? (y/n): "
+                ).strip().lower()
+
+                if conducted != "y":
+                    # Save the experiment as planned, without fake results.
+                    experiment_id = save_experiment(
+                        business_id=business_id,
+                        assumption_id=top_assumption_id,
+                        experiment=experiment,
+                        experiment_result=None
+                    )
+
+                    print(f"\nExperiment saved with ID: {experiment_id}")
+                    print("Status: planned")
+                    print("No experiment results or evidence were recorded.")
+                    print("Run the experiment and record real results later.")
+
+                    exit()
+
+                result_text = input("What actually happened? ").strip()
+                observations = input("What did you observe? ").strip()
+
+                sample_size_input = input(
+                    "How many people participated? (Enter if not applicable): "
+                ).strip()
+
+                successes_input = input(
+                    "How many successful outcomes? (Enter if not applicable): "
+                ).strip()
+
+                sample_size = (
+                    int(sample_size_input)
+                    if sample_size_input
+                    else None
+                )
+
+                successes = (
+                    int(successes_input)
+                    if successes_input
+                    else None
+                )
+
+                experiment_result = ExperimentResult(
+                    experiment=experiment.experiment,
+                    result=result_text,
+                    observations=observations,
+                    sample_size=sample_size,
+                    successes=successes
+                )
+
+
+                contribution_per_unit = (
+                    business.price - business.variable_cost
+                )
+
+                if contribution_per_unit <= 0:
+                    print(
+                        "\nCannot calculate a purchase threshold: "
+                        "price must exceed variable cost."
+                    )
+                    exit()
+
+                # Do not invent the number of reachable customers.
+                reachable_customers_input = input(
+                    "\nHow many eligible customers can this experiment "
+                    "reasonably reach? Enter a supported estimate: "
+                ).strip()
+
+                try:
+                    reachable_customers = int(reachable_customers_input)
+
+                    if reachable_customers <= 0:
+                        raise ValueError
+
+                except ValueError:
+                    print(
+                        "\nA positive whole-number estimate is required "
+                        "to calculate an economic purchase threshold."
+                    )
+                    exit()
+
+                threshold = build_economic_threshold(
+                    required_contribution=business.initial_budget,
+                    contribution_per_unit=contribution_per_unit,
+                    reachable_customers=reachable_customers
+                )
+
+
+                updated = apply_experiment_result(
+                    assumption=top_assumption_object,
+                    experiment=experiment,
+                    experiment_result=experiment_result,
+                    business_threshold=threshold,
+                    business=business
+                )
+
+
+
                 experiment_id = save_experiment(
                     business_id=business_id,
                     assumption_id=top_assumption_id,
                     experiment=experiment,
-                    experiment_result=None
+                    experiment_result=experiment_result
                 )
+
+                update_experiment_result(
+                    experiment_id=experiment_id,
+                    experiment_result=experiment_result
+                )
+
+
+
+
+                saved_experiments = get_experiments(business_id)
+
+
+
+                print("\nSaved experiments in database:")
+
+                for experiment in saved_experiments:
+                    print(experiment)
 
                 print(f"\nExperiment saved with ID: {experiment_id}")
-                print("Status: planned")
-                print("No experiment results or evidence were recorded.")
-                print("Run the experiment and record real results later.")
 
-                exit()
+                print("\nUpdated Assumption:")
+                print(updated["assumption"])
 
-            result_text = input("What actually happened? ").strip()
-            observations = input("What did you observe? ").strip()
+                print("\nUpdated Decision Analysis:")
+                print(updated["decision"])
 
-            sample_size_input = input(
-                "How many people participated? (Enter if not applicable): "
-            ).strip()
+                # Replace the old assumption with the experiment-updated assumption
+                updated_assumptions = assumptions.assumptions.copy()
 
-            successes_input = input(
-                "How many successful outcomes? (Enter if not applicable): "
-            ).strip()
+                updated_assumptions[top_assumption_index] = updated["assumption"]
 
-            sample_size = (
-                int(sample_size_input)
-                if sample_size_input
-                else None
-            )
-
-            successes = (
-                int(successes_input)
-                if successes_input
-                else None
-            )
-
-            experiment_result = ExperimentResult(
-                experiment=experiment.experiment,
-                result=result_text,
-                observations=observations,
-                sample_size=sample_size,
-                successes=successes
-            )
-
-            threshold = BusinessThreshold(
-                metric="purchase_rate",
-                value=0.20,
-                source="derived_from_economics",
-                rationale=(
-                    "The threshold is derived from the required "
-                    "contribution and expected reachable customers."
-                ),
-                economic_basis=EconomicThresholdBasis(
-                    required_contribution=40000,
-                    contribution_per_unit=40,
-                    reachable_customers=5000
+                # Re-evaluate all assumptions
+                final_results = evaluate_all_assumptions(
+                    updated_assumptions
                 )
-            )
 
-            updated = apply_experiment_result(
-                assumption=top_assumption_object,
-                experiment=experiment,
-                experiment_result=experiment_result,
-                business_threshold=threshold,
-                business=business
-            )
-
-
-
-            experiment_id = save_experiment(
-                business_id=business_id,
-                assumption_id=top_assumption_id,
-                experiment=experiment,
-                experiment_result=experiment_result
-            )
-
-            update_experiment_result(
-                experiment_id=experiment_id,
-                experiment_result=experiment_result
-            )
-
-
-
-            
-            saved_experiments = get_experiments(business_id)
-
-
-
-            print("\nSaved experiments in database:")
-
-            for experiment in saved_experiments:
-                print(experiment)
-
-            print(f"\nExperiment saved with ID: {experiment_id}")
-
-            print("\nUpdated Assumption:")
-            print(updated["assumption"])
-
-            print("\nUpdated Decision Analysis:")
-            print(updated["decision"])
-
-            # Replace the old assumption with the experiment-updated assumption
-            updated_assumptions = assumptions.assumptions.copy()
-
-            updated_assumptions[top_assumption_index] = updated["assumption"]
-
-            # Re-evaluate all assumptions
-            final_results = evaluate_all_assumptions(
-                updated_assumptions
-            )
-
-            # Make the final business decision
-            final_decision = make_decision(final_results)
-
-            print("\n==============================")
-            print("FINAL BUSINESS DECISION")
-            print("==============================")
-
-            print("\nDecision:")
-            print(final_decision["decision"])
-
-            print("\nWhy?")
-            print(final_decision["reason"])
-
-            print("\nOverall Risk:")
-            print(final_decision["overall_risk"])
-            
-            print("\nUnvalidated Assumptions")
-            print(final_decision["uncertainty_count"])
-
-            if final_decision["decision"] == "Launch":
-                print("\nRecommendation:")
-                print("The business is ready to proceed based on the validated assumptions.")
-
-            elif final_decision["decision"] == "Modify":
-                print("\nRecommendation:")
-                print("Modify the affected part of the business and run another experiment.")
-
-            elif final_decision["decision"] == "Test More":
-                print("\nRecommendation:")
-                print("More evidence is required before making a launch decision.")
-
-            elif final_decision["decision"] == "Don't Launch":
-                print("\nRecommendation:")
-                print("Do not launch the current business model because a critical assumption has strong contradictory evidence.")
-
-            if final_decision["decision"] == "Modify":
-                modification = generate_modification(
-                    assumption=updated["assumption"],
-                    experiment_result=experiment_result,
-                    decision=final_decision["decision"]
-                )
+                # Make the final business decision
+                final_decision = make_decision(final_results)
 
                 print("\n==============================")
-                print("MODIFICATION RECOMMENDATION")
+                print("FINAL BUSINESS DECISION")
                 print("==============================")
 
-                print("\nProblem:")
-                print(modification.problem)
+                print("\nDecision:")
+                print(final_decision["decision"])
 
-                print("\nEvidence:")
-                print(modification.evidence)
+                print("\nWhy?")
+                print(final_decision["reason"])
 
-                print("\nModification:")
-                print(modification.modification)
+                print("\nOverall Risk:")
+                print(final_decision["overall_risk"])
 
-                print("\nReason:")
-                print(modification.reason)
+                print("\nUnvalidated Assumptions")
+                print(final_decision["uncertainty_count"])
 
-                print("\nNext Experiment:")
-                print(modification.next_experiment)
+                if final_decision["decision"] == "Launch":
+                    print("\nRecommendation:")
+                    print("The business is ready to proceed based on the validated assumptions.")
+
+                elif final_decision["decision"] == "Modify":
+                    print("\nRecommendation:")
+                    print("Modify the affected part of the business and run another experiment.")
+
+                elif final_decision["decision"] == "Test More":
+                    print("\nRecommendation:")
+                    print("More evidence is required before making a launch decision.")
+
+                elif final_decision["decision"] == "Don't Launch":
+                    print("\nRecommendation:")
+                    print("Do not launch the current business model because a critical assumption has strong contradictory evidence.")
+
+                if final_decision["decision"] == "Modify":
+                    modification = generate_modification(
+                        assumption=updated["assumption"],
+                        experiment_result=experiment_result,
+                        decision=final_decision["decision"]
+                    )
+
+                    print("\n==============================")
+                    print("MODIFICATION RECOMMENDATION")
+                    print("==============================")
+
+                    print("\nProblem:")
+                    print(modification.problem)
+
+                    print("\nEvidence:")
+                    print(modification.evidence)
+
+                    print("\nModification:")
+                    print(modification.modification)
+
+                    print("\nReason:")
+                    print(modification.reason)
+
+                    print("\nNext Experiment:")
+                    print(modification.next_experiment)
 
 else:
     print("\nInvalid choice. Please enter 1 or 2.")
