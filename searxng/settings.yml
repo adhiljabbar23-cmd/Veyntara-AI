@@ -1,7 +1,7 @@
 use_default_settings: true
 
 server:
-  secret_key: "launchproof-secret-key-2026-change-this"
+  secret_key: "a41bc15d7b550aefb0e405a0d001ec373321b5e22f9f62e7d5b6edd9156bad0e"
 
 search:
   formats:

@@ -5,7 +5,7 @@ def search_web(query):
     
 
     response = requests.get(
-        "http://localhost:8080/search",
+        "http://localhost:8081/search",
         params = {
             "q" : query,
             "format": "json"

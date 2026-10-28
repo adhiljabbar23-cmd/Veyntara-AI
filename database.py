@@ -74,11 +74,27 @@ def initialize_database():
             ADD COLUMN status TEXT NOT NULL DEFAULT 'planned'
         """)
 
+    # Additive migration: preserve existing rows and values.
+    if "outcome_assessment" not in columns:
+        cursor.execute("""
+            ALTER TABLE experiments
+            ADD COLUMN outcome_assessment TEXT
+        """)
+
+    # A non-empty result is the only legacy signal that an experiment completed.
     cursor.execute("""
         UPDATE experiments
         SET status = 'completed'
         WHERE result IS NOT NULL
           AND TRIM(result) != ''
+        """)
+
+    # Repair legacy records incorrectly marked completed with no recorded result.
+    cursor.execute("""
+        UPDATE experiments
+        SET status = 'planned'
+        WHERE (result IS NULL OR TRIM(result) = '')
+          AND (outcome_assessment IS NULL OR TRIM(outcome_assessment) = '')
         """)
 
     connection.commit()
@@ -284,7 +300,8 @@ def get_experiments(business_id):
             observations,
             sample_size,
             successes,
-            status
+            status,
+            outcome_assessment
         FROM experiments
         WHERE business_id = ?
     """, (business_id,))
@@ -348,6 +365,9 @@ def update_experiment_result(experiment_id, experiment_result):
     connection = get_connection()
     cursor = connection.cursor()
 
+    assessment = getattr(experiment_result, "outcome_assessment", None)
+    status = "completed" if assessment else "planned"
+
     cursor.execute("""
         UPDATE experiments
         SET
@@ -355,13 +375,16 @@ def update_experiment_result(experiment_id, experiment_result):
             observations = ?,
             sample_size = ?,
             successes = ?,
-            status = 'completed'
+            outcome_assessment = ?,
+            status = ?
         WHERE id = ?
     """, (
         experiment_result.result,
         experiment_result.observations,
         experiment_result.sample_size,
         experiment_result.successes,
+        assessment,
+        status,
         experiment_id
     ))
 
@@ -369,3 +392,15 @@ def update_experiment_result(experiment_id, experiment_result):
     connection.close()
 
 
+def update_business_variable_cost(business_id, variable_cost):
+    """Save a user-confirmed variable cost for a legacy business record."""
+    connection = get_connection()
+    cursor = connection.cursor()
+    cursor.execute(
+        "UPDATE businesses SET variable_cost = ? WHERE id = ? AND variable_cost IS NULL",
+        (variable_cost, business_id)
+    )
+    connection.commit()
+    updated = cursor.rowcount
+    connection.close()
+    return updated

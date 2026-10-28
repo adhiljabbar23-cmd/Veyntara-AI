@@ -1,16 +1,16 @@
 from typing import Literal
 
-from pydantic import BaseModel,Field
+from pydantic import BaseModel, Field, model_validator
 
 class BusinessProfile(BaseModel):
     name: str
     idea: str
     target_customer: str
     location: str
-    price: float
-    variable_cost: float
+    price: float = Field(gt=0)
+    variable_cost: float = Field(ge=0)
     revenue_model: str
-    initial_budget: float
+    initial_budget: float = Field(ge=0)
     
 class EvidenceEvaluation(BaseModel):
     relevance : Literal["Low", "Medium", "High"]
@@ -33,17 +33,31 @@ class Experiment(BaseModel):
     assumption: str
     experiment: str
     success_metric: str
-    estimated_cost: float | None
+    estimated_cost: float | None = Field(default=None, ge=0)
     duration: str
-    planned_sample_size: int | None = None
+    planned_sample_size: int | None = Field(default=None, gt=0)
 
 
 class ExperimentResult(BaseModel):
     experiment: str
     result: str | None = None
     observations: str | None = None
-    sample_size: int | None = None
-    successes: int | None = None
+    sample_size: int | None = Field(default=None, ge=0)
+    successes: int | None = Field(default=None, ge=0)
+    outcome_assessment: Literal[
+        "Met", "Partially met", "Not met", "Inconclusive"
+    ] | None = None
+
+    @model_validator(mode="after")
+    def validate_successes(self):
+        if (
+            self.sample_size is not None
+            and self.successes is not None
+            and self.successes > self.sample_size
+        ):
+            raise ValueError("Successes cannot exceed sample size.")
+
+        return self
     
     
 class ExperimentAnalysis(BaseModel):

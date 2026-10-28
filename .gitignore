@@ -1,5 +1,42 @@
+
+# Python virtual environment
 venv/
+.venv/
+
+# Environment variables and secrets
 .env
+.env.*
+!.env.example
+
+# Python cache files
 __pycache__/
-*.pyc
-veyntara.db
+*.py[cod]
+
+# SQLite databases and backups
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+
+# Test and coverage artifacts
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Editor and operating-system files
+.vscode/
+.DS_Store
+Thumbs.db
+
+
+# Local database backups
+*.db.bak
+*.sqlite.bak
+*.sqlite3.bak
+
+# Temporary isolated test environment
+_safe_test/
+
+# Local backup copies of source files
+*.before-validation.bak
+*.before-searxng-fix.bak
