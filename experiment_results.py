@@ -1,4 +1,4 @@
-from llm import client
+from llm import get_client
 from models import (
     ExperimentResult,
     ExperimentAnalysis,
@@ -69,7 +69,7 @@ Return exactly:
 }}
 """
 
-    response = client.chat.completions.create(
+    response = get_client().chat.completions.create(
         model="auto",
         messages=[
             {

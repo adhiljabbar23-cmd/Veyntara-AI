@@ -1,4 +1,4 @@
-from llm import client
+from llm import get_client
 
 tools = [
     {
@@ -19,7 +19,7 @@ tools = [
     }
 ]
 
-response = client.chat.completions.create(
+response = get_client().chat.completions.create(
     model="gpt-oss-20b",
     messages=[
         {

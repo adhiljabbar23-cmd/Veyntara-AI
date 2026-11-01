@@ -1,4 +1,4 @@
-from llm import client
+from llm import get_client
 from models import ModificationRecommendation
 
 def generate_modification(assumption, experiment_result, decision):
@@ -52,7 +52,7 @@ Return exactly:
 }}
 """
 
-    response = client.chat.completions.create(
+    response = get_client().chat.completions.create(
         model="auto",
         messages=[
             {

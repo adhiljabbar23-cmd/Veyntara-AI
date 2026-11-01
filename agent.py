@@ -5,7 +5,7 @@ import json
 from tools import search_web
 from calculations import calculate_financials
 
-from llm import client
+from llm import get_client
 
 
 
@@ -79,7 +79,7 @@ def ask_ai(question):
     for _ in range(8):
         
         
-        response = client.chat.completions.create(
+        response = get_client().chat.completions.create(
             model="auto",
             messages=messages,
             tools=tools,

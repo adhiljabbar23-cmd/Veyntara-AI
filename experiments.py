@@ -1,4 +1,4 @@
-from llm import client
+from llm import get_client
 from models import Experiment
 from pydantic import ValidationError
 import json
@@ -176,7 +176,7 @@ Return exactly this structure:
 """
 
 
-    response = client.chat.completions.create(
+    response = get_client().chat.completions.create(
         model="auto",
         messages=[
             {
